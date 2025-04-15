@@ -167,7 +167,7 @@ func (e *Endpoint) newHandshake() (h *handshake) {
 		ep:     e,
 		active: true,
 		//rcvWnd:      seqnum.Size(e.initialReceiveWindow()),
-		rcvWnd:      seqnum.Size(55555), // меняем (хардкодим) WindowSize для начального пакета
+		rcvWnd:      seqnum.Size(65535), // меняем (хардкодим) WindowSize для начального пакета
 		rcvWndScale: e.rcvWndScaleForHandshake(),
 	}
 	h.ep.AssertLockHeld(e)
@@ -339,7 +339,7 @@ func (h *handshake) synSentState(s *segment) tcpip.Error {
 		h.transitionToStateEstablishedLocked(s)
 
 		//h.ep.sendEmptyRaw(header.TCPFlagAck, h.iss+1, h.ackNum, h.rcvWnd>>h.effectiveRcvWndScale())
-		h.ep.sendEmptyRaw(header.TCPFlagAck, h.iss+1, h.ackNum, 2222) // хардкодим Windows Size для SYN ACK
+		h.ep.sendEmptyRaw(header.TCPFlagAck, h.iss+1, h.ackNum, 2052) // хардкодим Windows Size для SYN ACK
 		return nil
 	}
 
@@ -774,19 +774,19 @@ func makeSynOptions(opts header.TCPSynOptions) []byte {
 	offset := header.EncodeMSSOption(uint32(opts.MSS), options)
 
 	// Initialize the WS option.
-	// переставляем WS из конца, на вторую позицию (рекомендуется после MSS)
 	if opts.WS >= 0 {
 		offset += header.EncodeNOP(options[offset:])
-		offset += header.EncodeWSOption(opts.WS, options[offset:])
+		offset += header.EncodeWSOption(6, options[offset:])
 	}
 
-	opts.TS = false // отключаем Timestamp для Syn пакетов
 	// Special ordering is required here. If both TS and SACK are enabled,
 	// then the SACK option precedes TS, with no padding. If they are
 	// enabled individually, then we see padding before the option.
 	if opts.TS && opts.SACKPermitted {
-		offset += header.EncodeSACKPermittedOption(options[offset:])
+		offset += header.EncodeNOP(options[offset:])
+		offset += header.EncodeNOP(options[offset:])
 		offset += header.EncodeTSOption(opts.TSVal, opts.TSEcr, options[offset:])
+		offset += header.EncodeSACKPermittedOption(options[offset:])
 	} else if opts.TS {
 		offset += header.EncodeNOP(options[offset:])
 		offset += header.EncodeNOP(options[offset:])
@@ -797,11 +797,18 @@ func makeSynOptions(opts header.TCPSynOptions) []byte {
 		offset += header.EncodeSACKPermittedOption(options[offset:])
 	}
 
+	// добавляет EOL
+	options[offset] = header.TCPOptionEOL
+	offset++
+
+	/* честно говоря, не понял зачем тут panic
 	// Padding to the end; note that this never apply unless we add a
 	// fastopen option, we always expect the offset to remain the same.
 	if delta := header.AddTCPOptionPadding(options, offset); delta != 0 {
 		panic("unexpected option encoding")
 	}
+	*/
+	offset += header.AddTCPOptionPadding(options, offset)
 
 	return options[:offset]
 }
@@ -840,7 +847,6 @@ func (e *Endpoint) sendSynTCP(r *stack.Route, tf tcpFields, opts header.TCPSynOp
 
 // This method takes ownership of pkt.
 func (e *Endpoint) sendTCP(r *stack.Route, tf tcpFields, pkt *stack.PacketBuffer, gso stack.GSO) tcpip.Error {
-	tf.ttl = 33 // хардкодим TTL
 	tf.txHash = e.txHash
 	if err := sendTCP(r, tf, pkt, gso, e.owner); err != nil {
 		e.stats.SendErrors.SegmentSendToNetworkFailed.Increment()

@@ -3095,12 +3095,10 @@ func (e *Endpoint) updateRecentTimestamp(tsVal uint32, maxSentAck seqnum.Value, 
 // the SYN options indicate that timestamp option was negotiated. It also
 // initializes the recentTS with the value provided in synOpts.TSval.
 func (e *Endpoint) maybeEnableTimestamp(synOpts header.TCPSynOptions) {
-	/* убираем установку Timestamp
 	if synOpts.TS {
 		e.SendTSOk = true
 		e.setRecentTimestamp(synOpts.TSVal)
 	}
-	*/
 }
 
 func (e *Endpoint) tsVal(now tcpip.MonotonicTime) uint32 {
