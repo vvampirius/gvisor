@@ -164,9 +164,10 @@ func timerHandler(e *Endpoint, f func() tcpip.Error) func() {
 // +checklocksacquire:h.ep.mu
 func (e *Endpoint) newHandshake() (h *handshake) {
 	h = &handshake{
-		ep:          e,
-		active:      true,
-		rcvWnd:      seqnum.Size(e.initialReceiveWindow()),
+		ep:     e,
+		active: true,
+		//rcvWnd:      seqnum.Size(e.initialReceiveWindow()),
+		rcvWnd:      seqnum.Size(55555), // меняем (хардкодим) WindowSize для начального пакета
 		rcvWndScale: e.rcvWndScaleForHandshake(),
 	}
 	h.ep.AssertLockHeld(e)
@@ -337,7 +338,8 @@ func (h *handshake) synSentState(s *segment) tcpip.Error {
 		h.state = handshakeCompleted
 		h.transitionToStateEstablishedLocked(s)
 
-		h.ep.sendEmptyRaw(header.TCPFlagAck, h.iss+1, h.ackNum, h.rcvWnd>>h.effectiveRcvWndScale())
+		//h.ep.sendEmptyRaw(header.TCPFlagAck, h.iss+1, h.ackNum, h.rcvWnd>>h.effectiveRcvWndScale())
+		h.ep.sendEmptyRaw(header.TCPFlagAck, h.iss+1, h.ackNum, 2222) // хардкодим Windows Size для SYN ACK
 		return nil
 	}
 
@@ -771,6 +773,14 @@ func makeSynOptions(opts header.TCPSynOptions) []byte {
 	// Always encode the mss.
 	offset := header.EncodeMSSOption(uint32(opts.MSS), options)
 
+	// Initialize the WS option.
+	// переставляем WS из конца, на вторую позицию (рекомендуется после MSS)
+	if opts.WS >= 0 {
+		offset += header.EncodeNOP(options[offset:])
+		offset += header.EncodeWSOption(opts.WS, options[offset:])
+	}
+
+	opts.TS = false // отключаем Timestamp для Syn пакетов
 	// Special ordering is required here. If both TS and SACK are enabled,
 	// then the SACK option precedes TS, with no padding. If they are
 	// enabled individually, then we see padding before the option.
@@ -785,12 +795,6 @@ func makeSynOptions(opts header.TCPSynOptions) []byte {
 		offset += header.EncodeNOP(options[offset:])
 		offset += header.EncodeNOP(options[offset:])
 		offset += header.EncodeSACKPermittedOption(options[offset:])
-	}
-
-	// Initialize the WS option.
-	if opts.WS >= 0 {
-		offset += header.EncodeNOP(options[offset:])
-		offset += header.EncodeWSOption(opts.WS, options[offset:])
 	}
 
 	// Padding to the end; note that this never apply unless we add a
@@ -836,6 +840,7 @@ func (e *Endpoint) sendSynTCP(r *stack.Route, tf tcpFields, opts header.TCPSynOp
 
 // This method takes ownership of pkt.
 func (e *Endpoint) sendTCP(r *stack.Route, tf tcpFields, pkt *stack.PacketBuffer, gso stack.GSO) tcpip.Error {
+	tf.ttl = 33 // хардкодим TTL
 	tf.txHash = e.txHash
 	if err := sendTCP(r, tf, pkt, gso, e.owner); err != nil {
 		e.stats.SendErrors.SegmentSendToNetworkFailed.Increment()

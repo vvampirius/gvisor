@@ -1831,6 +1831,7 @@ func (s *sender) sendSegmentFromPacketBuffer(pkt *stack.PacketBuffer, flags head
 	}
 
 	rcvNxt, rcvWnd := s.ep.rcv.getSendParams()
+	rcvWnd = 8888 // хардкодим Window Size для пакетов из буфера эндпоинта
 
 	// Remember the max sent ack.
 	s.MaxSentAck = rcvNxt
@@ -1855,6 +1856,7 @@ func (s *sender) sendEmptySegment(flags header.TCPFlags, seq seqnum.Value) tcpip
 	}
 
 	rcvNxt, rcvWnd := s.ep.rcv.getSendParams()
+	rcvWnd = 12121 // хардкодим Window Size для пустых сегментов
 
 	// Remember the max sent ack.
 	s.MaxSentAck = rcvNxt
